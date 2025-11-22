@@ -229,6 +229,16 @@
             display: none;
         }
 
+        .error-message {
+            background: #f44336;
+            color: white;
+            padding: 15px;
+            border-radius: 12px;
+            text-align: center;
+            margin-bottom: 20px;
+            display: none;
+        }
+
         .tabs {
             display: flex;
             gap: 10px;
@@ -260,6 +270,11 @@
         .tab-content.active {
             display: block;
         }
+
+        .loading {
+            text-align: center;
+            color: var(--tg-theme-hint-color, #999);
+        }
     </style>
 </head>
 <body>
@@ -268,13 +283,14 @@
         <div class="subtitle">Predice el resultado del partido</div>
     </div>
 
+    <div id="error-message" class="error-message"></div>
+    <div id="success-message" class="success-message">
+        ✅ ¡Porra guardada correctamente!
+    </div>
+
     <div class="tabs">
         <button class="tab active" onclick="switchTab('hacer')">Hacer Porra</button>
         <button class="tab" onclick="switchTab('ver')">Mi Porra</button>
-    </div>
-
-    <div id="success-message" class="success-message">
-        ✅ ¡Porra guardada correctamente!
     </div>
 
     <!-- Tab: Hacer Porra -->
@@ -283,12 +299,12 @@
             <div class="teams">
                 <div class="team">
                     <div class="team-logo">🏠</div>
-                    <div class="team-name" id="team-local">Osasuna</div>
+                    <div class="team-name" id="team-local">Real Madrid</div>
                 </div>
                 <div class="vs">VS</div>
                 <div class="team">
                     <div class="team-logo">✈️</div>
-                    <div class="team-name" id="team-visitante">Real Sociedad</div>
+                    <div class="team-name" id="team-visitante">Barcelona</div>
                 </div>
             </div>
 
@@ -340,7 +356,7 @@
         <div class="my-prediction">
             <h3>Tu predicción actual:</h3>
             <div class="prediction-value" id="current-prediction">
-                Aún no has hecho ninguna porra
+                <div class="loading">Cargando...</div>
             </div>
         </div>
 
@@ -362,11 +378,18 @@
 
         // Obtener datos del usuario de Telegram
         const user = tg.initDataUnsafe?.user;
-        const userId = user?.id || 'demo';
+        const userId = user?.id || null;
         const userName = user?.first_name || 'Usuario';
 
-        // Cargar porra guardada al iniciar
-        loadSavedPrediction();
+        console.log("🔍 Debug Info:");
+        console.log("User ID:", userId);
+        console.log("User Name:", userName);
+        console.log("Telegram Data:", tg.initData);
+
+        // Verificar que estamos en Telegram
+        if (!userId) {
+            showError("❌ No se pudo obtener tu ID de usuario de Telegram");
+        }
 
         function switchTab(tab) {
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -413,7 +436,30 @@
             });
         }
 
+        function showSuccess(msg) {
+            const el = document.getElementById('success-message');
+            el.textContent = msg;
+            el.style.display = 'block';
+            setTimeout(() => {
+                el.style.display = 'none';
+            }, 3000);
+        }
+
+        function showError(msg) {
+            const el = document.getElementById('error-message');
+            el.textContent = msg;
+            el.style.display = 'block';
+            setTimeout(() => {
+                el.style.display = 'none';
+            }, 5000);
+        }
+
         function submitPrediction() {
+            if (!userId) {
+                showError("❌ No se puede identificar tu usuario de Telegram");
+                return;
+            }
+
             const prediction = {
                 userId: userId,
                 userName: userName,
@@ -424,34 +470,17 @@
                 timestamp: new Date().toISOString()
             };
 
-            // Guardar en localStorage (simulación)
-            // En producción, esto se enviaría a tu backend/Google Sheets
-            localStorage.setItem(`porra_${userId}`, JSON.stringify(prediction));
-            currentPrediction = prediction;
-
-            // Mostrar mensaje de éxito
-            const successMsg = document.getElementById('success-message');
-            successMsg.style.display = 'block';
-            setTimeout(() => {
-                successMsg.style.display = 'none';
-            }, 3000);
+            console.log("📤 Enviando predicción:", prediction);
 
             // Enviar datos a través de Telegram Web App
-            tg.sendData(JSON.stringify(prediction));
-
-            // Opcionalmente cerrar la web app
-            // tg.close();
-        }
-
-        function loadSavedPrediction() {
-            const saved = localStorage.getItem(`porra_${userId}`);
-            if (saved) {
-                currentPrediction = JSON.parse(saved);
-                scoreLocal = currentPrediction.scoreLocal;
-                scoreVisitante = currentPrediction.scoreVisitante;
-                document.getElementById('score-local').textContent = scoreLocal;
-                document.getElementById('score-visitante').textContent = scoreVisitante;
-                updateQuickResultsHighlight();
+            try {
+                tg.sendData(JSON.stringify(prediction));
+                currentPrediction = prediction;
+                showSuccess("✅ ¡Porra guardada correctamente!");
+                console.log("✅ Datos enviados al bot");
+            } catch (error) {
+                showError("❌ Error al enviar la porra: " + error.message);
+                console.error("❌ Error:", error);
             }
         }
 
@@ -462,7 +491,7 @@
                     <strong>${currentPrediction.teamLocal} ${currentPrediction.scoreLocal} - ${currentPrediction.scoreVisitante} ${currentPrediction.teamVisitante}</strong>
                 `;
             } else {
-                predictionDiv.textContent = 'Aún no has hecho ninguna porra';
+                predictionDiv.innerHTML = "Aún no has hecho ninguna porra";
             }
         }
 
